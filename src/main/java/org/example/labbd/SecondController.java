@@ -18,6 +18,7 @@ import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.usermodel.Workbook;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import org.apache.poi.xwpf.usermodel.*;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -255,6 +256,129 @@ public class SecondController implements Initializable {
         } catch (SQLException e) {
             e.printStackTrace();
             labelState.setText("Ошибка при загрузке данных отчёта: " + e.getMessage());
+        }
+    }
+
+    private void loadHavingReportData(int year) {
+        reportData.clear();
+        // SQL запрос с HAVING - аналог из методички, адаптированный для вашей БД
+        String sql = """
+        SELECT cl.ID_Client AS id, cl.Firstname AS Имя, cl.Lastname AS Фамилия,
+               cl.NumberPhone AS Телефон,
+               COUNT(rov.ID_Visits) AS Количество_посещений,
+               SUM(sub.Price) AS Общая_стоимость
+        FROM Client cl
+        JOIN sale_of_subscriptions sos ON sos.Client_ID_Client = cl.ID_Client
+        JOIN subscription sub ON sos.Subscription_ID_Subscription = sub.ID_Subscription
+        JOIN registration_of_visits rov ON rov.Sale_of_subscriptions_Bank_card_num = sos.Bank_card_num
+            AND rov.Sale_of_subscriptions_Subscription_ID_Subscription = sos.Subscription_ID_Subscription
+            AND rov.Sale_of_subscriptions_Fitness_center_ID_Fitness_center = sos.Fitness_center_ID_Fitness_center
+        WHERE YEAR(rov.Visit_time) = ?
+        GROUP BY cl.ID_Client, cl.Firstname, cl.Lastname, cl.NumberPhone
+        HAVING SUM(sub.Price) > 10000
+    """;
+
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+
+            pstmt.setInt(1, year);
+            ResultSet rs = pstmt.executeQuery();
+
+            while (rs.next()) {
+                reportData.add(new Report(
+                        rs.getInt("id"),
+                        rs.getString("Имя"),
+                        rs.getString("Фамилия"),
+                        rs.getInt("Количество_посещений"),
+                        rs.getInt("Общая_стоимость")
+                ));
+            }
+            labelState.setText("Данные отчёта по году " + year + " загружены!");
+        } catch (SQLException e) {
+            e.printStackTrace();
+            labelState.setText("Ошибка при загрузке данных отчёта: " + e.getMessage());
+        }
+    }
+
+    @FXML
+    private void exportToWord() {
+        DirectoryChooser directoryChooser = new DirectoryChooser();
+        directoryChooser.setTitle("Выберите папку для сохранения отчёта Word");
+        directoryChooser.setInitialDirectory(new File(System.getProperty("user.home")));
+        File selectedDirectory = directoryChooser.showDialog(root.getScene().getWindow());
+
+        if (selectedDirectory == null) {
+            labelState.setText("Сохранение отменено: папка не выбрана");
+            return;
+        }
+
+        File outputFile = new File(selectedDirectory, "ClientVisitsReport.docx");
+        String filePath = outputFile.getAbsolutePath();
+
+        try {
+            XWPFDocument document = new XWPFDocument();
+            XWPFParagraph titleParagraph = document.createParagraph();
+            titleParagraph.setAlignment(ParagraphAlignment.CENTER);
+            XWPFRun titleRun = titleParagraph.createRun();
+            titleRun.setText("Отчет по клиентам фитнес-центра");
+            titleRun.setBold(true);
+            titleRun.setFontSize(16);
+
+            // Добавляем пустую строку
+            document.createParagraph();
+
+            // Создаем таблицу
+            XWPFTable table = document.createTable();
+
+            // Заголовок таблицы
+            XWPFTableRow headerRow = table.getRow(0);
+            if (headerRow == null) headerRow = table.createRow();
+
+            // Заголовки столбцов
+            String[] headers = {"ID", "Имя", "Фамилия", "Количество посещений", "Общая стоимость"};
+            for (int i = 0; i < headers.length; i++) {
+                XWPFTableCell cell;
+                if (i == 0) {
+                    cell = headerRow.getCell(0);
+                } else {
+                    cell = headerRow.createCell();
+                }
+                cell.setText(headers[i]);
+                cell.setParagraph(cell.getParagraphs().get(0));
+                cell.getParagraphs().get(0).getRuns().get(0).setBold(true);
+            }
+
+            // Наполняем таблицу данными
+            for (Report report : reportData) {
+                XWPFTableRow row = table.createRow();
+                row.getCell(0).setText(String.valueOf(report.getClientID()));
+                row.getCell(1).setText(report.getFirstName());
+                row.getCell(2).setText(report.getLastName());
+                row.getCell(3).setText(String.valueOf(report.getVisitCount()));
+                row.getCell(4).setText(String.valueOf(report.getTotalPrice()));
+            }
+
+            // Добавляем информацию о дате создания отчета
+            XWPFParagraph dateParagraph = document.createParagraph();
+            XWPFRun dateRun = dateParagraph.createRun();
+            dateRun.setText("Отчет сформирован: " + java.time.LocalDate.now());
+
+            // Сохраняем документ
+            try (FileOutputStream out = new FileOutputStream(outputFile)) {
+                document.write(out);
+                labelState.setText("Отчёт в Word сохранён в " + filePath);
+            }
+
+            // Закрываем документ
+            document.close();
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            String errorMessage = e.getMessage().contains("Отказано в доступе")
+                    ? "Отказано в доступе. Выберите другую папку, например, Документы."
+                    : "Ошибка сохранения: " + e.getMessage();
+            labelState.setText(errorMessage);
+            System.err.println("Failed to save Word file at: " + filePath);
         }
     }
 
