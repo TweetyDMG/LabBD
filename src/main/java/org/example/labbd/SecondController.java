@@ -36,6 +36,7 @@ public class SecondController implements Initializable {
     @FXML private TextField phoneNumberField;
     @FXML private TextField genderField;
     @FXML private TextField emailField;
+    @FXML private TextField yearField;
     @FXML private TableView<Client> clientTable;
     @FXML private TableColumn<Client, Integer> clientIdColumn;
     @FXML private TableColumn<Client, String> firstNameColumn;
@@ -54,6 +55,8 @@ public class SecondController implements Initializable {
     @FXML private Button clientsButton;
     @FXML private Button reportButton;
     @FXML private Button exportButton;
+    @FXML private Button exportWordButton;
+    @FXML private Button havingReportButton;
     @FXML private Label labelState;
 
     private ObservableList<Client> clientData = FXCollections.observableArrayList();
@@ -379,6 +382,44 @@ public class SecondController implements Initializable {
                     : "Ошибка сохранения: " + e.getMessage();
             labelState.setText(errorMessage);
             System.err.println("Failed to save Word file at: " + filePath);
+        }
+    }
+
+    @FXML
+    private void showHavingReport() {
+        try {
+            // Проверка наличия значения года
+            String yearText = yearField.getText();
+            if (yearText == null || yearText.trim().isEmpty()) {
+                labelState.setText("Пожалуйста, введите год для фильтрации.");
+                return;
+            }
+
+            // Преобразование текста в число
+            int year;
+            try {
+                year = Integer.parseInt(yearText);
+            } catch (NumberFormatException e) {
+                labelState.setText("Пожалуйста, введите корректный год (целое число).");
+                return;
+            }
+
+            // Загрузка данных с применением фильтра HAVING
+            loadHavingReportData(year);
+
+            // Отображение таблицы отчетов
+            clientTable.setVisible(false);
+            reportTable.setVisible(true);
+            inputPane.setVisible(false);
+            exportButton.setVisible(true);
+            exportWordButton.setVisible(true);  // Делаем видимой кнопку экспорта в Word
+            clientsButton.setDisable(false);
+            reportButton.setDisable(true);
+
+            labelState.setText("Отчёт по клиентам, потратившим более 10000 в " + year + " году.");
+        } catch (Exception e) {
+            e.printStackTrace();
+            labelState.setText("Ошибка при формировании отчёта: " + e.getMessage());
         }
     }
 

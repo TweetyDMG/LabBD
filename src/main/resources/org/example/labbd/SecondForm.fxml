@@ -121,7 +121,7 @@
                         </TableView>
                     </children>
                 </StackPane>
-                <Label fx:id="labelState" alignment="CENTER" prefHeight="96.0" prefWidth="231.0" style="-fx-border-color: black;" text="Управление данными клиентов">
+                <Label fx:id="labelState" alignment="CENTER" style="-fx-border-color: black;" text="Управление данными клиентов" textAlignment="JUSTIFY" wrapText="true" VBox.vgrow="ALWAYS">
                     <VBox.margin>
                         <Insets bottom="10.0" left="10.0" right="10.0" top="10.0" />
                     </VBox.margin>
