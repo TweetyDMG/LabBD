@@ -47,8 +47,9 @@ public class SecondController implements Initializable {
     @FXML private TableColumn<Client, String> emailColumn;
     @FXML private TableView<Report> reportTable;
     @FXML private TableColumn<Report, Integer> reportIdColumn;
-    @FXML private TableColumn<Report, Integer> reportFirstNameColumn;
+    @FXML private TableColumn<Report, String> reportFirstNameColumn;
     @FXML private TableColumn<Report, String> reportLastNameColumn;
+    @FXML private TableColumn<Report, String> reportPhoneColumn;
     @FXML private TableColumn<Report, Integer> reportVisitCountColumn;
     @FXML private TableColumn<Report, Integer> reportTotalPriceColumn;
     @FXML private StackPane tablePane;
@@ -101,20 +102,28 @@ public class SecondController implements Initializable {
         private int clientID;
         private String firstName;
         private String lastName;
+        private String phone;
         private int visitCount;
         private int totalPrice;
 
-        public Report(int clientID, String firstName, String lastName, int visitCount, int totalPrice) {
+        public Report(int clientID, String firstName, String lastName, String phone, int visitCount, int totalPrice) {
             this.clientID = clientID;
             this.firstName = firstName;
             this.lastName = lastName;
+            this.phone = phone;
             this.visitCount = visitCount;
             this.totalPrice = totalPrice;
+        }
+
+        // Новый конструктор для стандартного отчёта
+        public Report(int clientID, String firstName, String lastName, int visitCount, int totalPrice) {
+            this(clientID, firstName, lastName, null, visitCount, totalPrice);
         }
 
         public int getClientID() { return clientID; }
         public String getFirstName() { return firstName; }
         public String getLastName() { return lastName; }
+        public String getPhone() { return phone; }
         public int getVisitCount() { return visitCount; }
         public int getTotalPrice() { return totalPrice; }
     }
@@ -134,6 +143,7 @@ public class SecondController implements Initializable {
         reportIdColumn.setCellValueFactory(new PropertyValueFactory<>("clientID"));
         reportFirstNameColumn.setCellValueFactory(new PropertyValueFactory<>("firstName"));
         reportLastNameColumn.setCellValueFactory(new PropertyValueFactory<>("lastName"));
+        reportPhoneColumn.setCellValueFactory(new PropertyValueFactory<>("phone")); // Новая колонка
         reportVisitCountColumn.setCellValueFactory(new PropertyValueFactory<>("visitCount"));
         reportTotalPriceColumn.setCellValueFactory(new PropertyValueFactory<>("totalPrice"));
 
@@ -232,20 +242,20 @@ public class SecondController implements Initializable {
     private void loadReportData() {
         reportData.clear();
         String sql = """
-            SELECT cl.ID_Client AS id, cl.Firstname AS Имя, cl.Lastname AS Фамилия,
-                   COUNT(rov.ID_Visits) AS Количество_посещений,
-                   COALESCE(SUM(sub.Price), 0) AS Общая_стоимость
-            FROM Client cl
-            LEFT JOIN sale_of_subscriptions sos ON sos.Client_ID_Client = cl.ID_Client
-            LEFT JOIN subscription sub ON sos.Subscription_ID_Subscription = sub.ID_Subscription
-            LEFT JOIN registration_of_visits rov ON rov.Sale_of_subscriptions_Bank_card_num = sos.Bank_card_num
-                AND rov.Sale_of_subscriptions_Subscription_ID_Subscription = sos.Subscription_ID_Subscription
-                AND rov.Sale_of_subscriptions_Fitness_center_ID_Fitness_center = sos.Fitness_center_ID_Fitness_center
-            GROUP BY cl.ID_Client, cl.Firstname, cl.Lastname
-        """;
+        SELECT cl.ID_Client AS id, cl.Firstname AS Имя, cl.Lastname AS Фамилия,
+               COUNT(rov.ID_Visits) AS Количество_посещений,
+               COALESCE(SUM(sub.Price), 0) AS Общая_стоимость
+        FROM Client cl
+        LEFT JOIN sale_of_subscriptions sos ON sos.Client_ID_Client = cl.ID_Client
+        LEFT JOIN subscription sub ON sos.Subscription_ID_Subscription = sub.ID_Subscription
+        LEFT JOIN registration_of_visits rov ON rov.Sale_of_subscriptions_Bank_card_num = sos.Bank_card_num
+            AND rov.Sale_of_subscriptions_Subscription_ID_Subscription = sos.Subscription_ID_Subscription
+            AND rov.Sale_of_subscriptions_Fitness_center_ID_Fitness_center = sos.Fitness_center_ID_Fitness_center
+        GROUP BY cl.ID_Client, cl.Firstname, cl.Lastname
+    """;
         try (Connection conn = DatabaseConnection.getConnection();
-             Statement stmt = conn.createStatement();
-             ResultSet rs = stmt.executeQuery(sql)) {
+             PreparedStatement pstmt = conn.prepareStatement(sql);
+             ResultSet rs = pstmt.executeQuery()) {
             while (rs.next()) {
                 reportData.add(new Report(
                         rs.getInt("id"),
@@ -264,39 +274,38 @@ public class SecondController implements Initializable {
 
     private void loadHavingReportData(int year) {
         reportData.clear();
-        // SQL запрос с HAVING - аналог из методички, адаптированный для вашей БД
         String sql = """
         SELECT cl.ID_Client AS id, cl.Firstname AS Имя, cl.Lastname AS Фамилия,
                cl.NumberPhone AS Телефон,
                COUNT(rov.ID_Visits) AS Количество_посещений,
-               SUM(sub.Price) AS Общая_стоимость
+               COALESCE(SUM(sub.Price), 0) AS Общая_стоимость
         FROM Client cl
         JOIN sale_of_subscriptions sos ON sos.Client_ID_Client = cl.ID_Client
         JOIN subscription sub ON sos.Subscription_ID_Subscription = sub.ID_Subscription
         JOIN registration_of_visits rov ON rov.Sale_of_subscriptions_Bank_card_num = sos.Bank_card_num
             AND rov.Sale_of_subscriptions_Subscription_ID_Subscription = sos.Subscription_ID_Subscription
             AND rov.Sale_of_subscriptions_Fitness_center_ID_Fitness_center = sos.Fitness_center_ID_Fitness_center
-        WHERE YEAR(rov.Visit_time) = ?
+        WHERE YEAR(rov.ArriveTime) = ?
         GROUP BY cl.ID_Client, cl.Firstname, cl.Lastname, cl.NumberPhone
-        HAVING SUM(sub.Price) > 10000
+        HAVING COALESCE(SUM(sub.Price), 0) > 1000
     """;
 
         try (Connection conn = DatabaseConnection.getConnection();
              PreparedStatement pstmt = conn.prepareStatement(sql)) {
-
             pstmt.setInt(1, year);
-            ResultSet rs = pstmt.executeQuery();
-
-            while (rs.next()) {
-                reportData.add(new Report(
-                        rs.getInt("id"),
-                        rs.getString("Имя"),
-                        rs.getString("Фамилия"),
-                        rs.getInt("Количество_посещений"),
-                        rs.getInt("Общая_стоимость")
-                ));
+            try (ResultSet rs = pstmt.executeQuery()) {
+                while (rs.next()) {
+                    reportData.add(new Report(
+                            rs.getInt("id"),
+                            rs.getString("Имя"),
+                            rs.getString("Фамилия"),
+                            rs.getString("Телефон"),
+                            rs.getInt("Количество_посещений"),
+                            rs.getInt("Общая_стоимость")
+                    ));
+                }
+                labelState.setText("Данные отчёта по году " + year + " загружены!");
             }
-            labelState.setText("Данные отчёта по году " + year + " загружены!");
         } catch (SQLException e) {
             e.printStackTrace();
             labelState.setText("Ошибка при загрузке данных отчёта: " + e.getMessage());
@@ -305,6 +314,11 @@ public class SecondController implements Initializable {
 
     @FXML
     private void exportToWord() {
+        if (reportData.isEmpty()) {
+            labelState.setText("Нет данных для экспорта в Word");
+            return;
+        }
+
         DirectoryChooser directoryChooser = new DirectoryChooser();
         directoryChooser.setTitle("Выберите папку для сохранения отчёта Word");
         directoryChooser.setInitialDirectory(new File(System.getProperty("user.home")));
@@ -327,52 +341,42 @@ public class SecondController implements Initializable {
             titleRun.setBold(true);
             titleRun.setFontSize(16);
 
-            // Добавляем пустую строку
             document.createParagraph();
 
-            // Создаем таблицу
             XWPFTable table = document.createTable();
-
-            // Заголовок таблицы
             XWPFTableRow headerRow = table.getRow(0);
-            if (headerRow == null) headerRow = table.createRow();
-
-            // Заголовки столбцов
-            String[] headers = {"ID", "Имя", "Фамилия", "Количество посещений", "Общая стоимость"};
+            String[] headers = {"ID", "Имя", "Фамилия", "Телефон", "Посещений", "Стоимость"};
             for (int i = 0; i < headers.length; i++) {
-                XWPFTableCell cell;
-                if (i == 0) {
-                    cell = headerRow.getCell(0);
-                } else {
-                    cell = headerRow.createCell();
-                }
+                XWPFTableCell cell = i == 0 ? headerRow.getCell(0) : headerRow.addNewTableCell();
                 cell.setText(headers[i]);
-                cell.setParagraph(cell.getParagraphs().get(0));
-                cell.getParagraphs().get(0).getRuns().get(0).setBold(true);
+                cell.setVerticalAlignment(XWPFTableCell.XWPFVertAlign.CENTER);
+                XWPFParagraph p = cell.getParagraphs().get(0);
+                p.setAlignment(ParagraphAlignment.CENTER);
+                p.getRuns().get(0).setBold(true);
             }
 
-            // Наполняем таблицу данными
             for (Report report : reportData) {
                 XWPFTableRow row = table.createRow();
                 row.getCell(0).setText(String.valueOf(report.getClientID()));
                 row.getCell(1).setText(report.getFirstName());
                 row.getCell(2).setText(report.getLastName());
-                row.getCell(3).setText(String.valueOf(report.getVisitCount()));
-                row.getCell(4).setText(String.valueOf(report.getTotalPrice()));
+                row.getCell(3).setText(report.getPhone());
+                row.getCell(4).setText(String.valueOf(report.getVisitCount()));
+                row.getCell(5).setText(String.valueOf(report.getTotalPrice()));
+                for (int i = 0; i < 6; i++) {
+                    row.getCell(i).getParagraphs().get(0).setAlignment(ParagraphAlignment.CENTER);
+                }
             }
 
-            // Добавляем информацию о дате создания отчета
             XWPFParagraph dateParagraph = document.createParagraph();
             XWPFRun dateRun = dateParagraph.createRun();
             dateRun.setText("Отчет сформирован: " + java.time.LocalDate.now());
 
-            // Сохраняем документ
             try (FileOutputStream out = new FileOutputStream(outputFile)) {
                 document.write(out);
                 labelState.setText("Отчёт в Word сохранён в " + filePath);
             }
 
-            // Закрываем документ
             document.close();
 
         } catch (Exception e) {
@@ -416,7 +420,7 @@ public class SecondController implements Initializable {
             clientsButton.setDisable(false);
             reportButton.setDisable(true);
 
-            labelState.setText("Отчёт по клиентам, потратившим более 10000 в " + year + " году.");
+            labelState.setText("Отчёт по клиентам, потратившим более 1000 в " + year + " году.");
         } catch (Exception e) {
             e.printStackTrace();
             labelState.setText("Ошибка при формировании отчёта: " + e.getMessage());
@@ -431,6 +435,11 @@ public class SecondController implements Initializable {
         String phoneNumber = phoneNumberField.getText();
         String gender = genderField.getText();
         String email = emailField.getText();
+
+        if (firstName.trim().isEmpty() || lastName.trim().isEmpty()) {
+            labelState.setText("Имя и фамилия обязательны!");
+            return;
+        }
         String sql = "INSERT INTO Client (Firstname, Fathername, Lastname, NumberPhone, Gender, Email) VALUES (?, ?, ?, ?, ?, ?)";
         try (Connection conn = DatabaseConnection.getConnection();
              PreparedStatement pstmt = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
@@ -499,10 +508,12 @@ public class SecondController implements Initializable {
 
     @FXML
     private void showReport() {
+        loadReportData();
         clientTable.setVisible(false);
         reportTable.setVisible(true);
         inputPane.setVisible(false);
         exportButton.setVisible(true);
+        exportWordButton.setVisible(true);
         clientsButton.setDisable(false);
         reportButton.setDisable(true);
         labelState.setText("Отображение отчёта по посещениям");
@@ -512,7 +523,6 @@ public class SecondController implements Initializable {
     private void exportToExcel() {
         DirectoryChooser directoryChooser = new DirectoryChooser();
         directoryChooser.setTitle("Выберите папку для сохранения отчёта");
-        // Устанавливаем начальную директорию на папку пользователя
         directoryChooser.setInitialDirectory(new File(System.getProperty("user.home")));
         File selectedDirectory = directoryChooser.showDialog(root.getScene().getWindow());
 
@@ -528,7 +538,7 @@ public class SecondController implements Initializable {
         try {
             Sheet sheet = workbook.createSheet("Clients Visits Report");
             Row headerRow = sheet.createRow(0);
-            String[] headers = {"ID", "Имя", "Фамилия", "Количество посещений", "Общая стоимость"};
+            String[] headers = {"ID", "Имя", "Фамилия", "Телефон", "Количество посещений", "Общая стоимость"};
             for (int i = 0; i < headers.length; i++) {
                 headerRow.createCell(i).setCellValue(headers[i]);
             }
@@ -539,8 +549,9 @@ public class SecondController implements Initializable {
                 row.createCell(0).setCellValue(report.getClientID());
                 row.createCell(1).setCellValue(report.getFirstName());
                 row.createCell(2).setCellValue(report.getLastName());
-                row.createCell(3).setCellValue(report.getVisitCount());
-                row.createCell(4).setCellValue(report.getTotalPrice());
+                row.createCell(3).setCellValue(report.getPhone());
+                row.createCell(4).setCellValue(report.getVisitCount());
+                row.createCell(5).setCellValue(report.getTotalPrice());
             }
 
             try (FileOutputStream fileOut = new FileOutputStream(outputFile)) {

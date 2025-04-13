@@ -115,6 +115,7 @@
                                 <TableColumn fx:id="reportIdColumn" prefWidth="50" text="ID" />
                                 <TableColumn fx:id="reportFirstNameColumn" prefWidth="100" text="Имя" />
                                 <TableColumn fx:id="reportLastNameColumn" prefWidth="100" text="Фамилия" />
+                                <TableColumn fx:id="reportPhoneColumn" prefWidth="100" text="Телефон" />
                                 <TableColumn fx:id="reportVisitCountColumn" prefWidth="100" text="Посещений" />
                                 <TableColumn fx:id="reportTotalPriceColumn" prefWidth="100" text="Стоимость" />
                             </columns>
